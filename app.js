@@ -1,5 +1,6 @@
 import { createWalletClient, createPublicClient, custom, parseEther, formatEther } from 'https://esm.sh/viem@2.40.0';
 import { monadTestnet } from 'https://esm.sh/viem@2.40.0/chains';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const CONTRACT_ADDRESS = "0x0d0e0266766d56b9be8a1cb1b3f05c38ca7a1046";
 const CONTENT_PRICE = "0.01";
@@ -7,7 +8,10 @@ const STORAGE_KEYS = {
     posts: 'capybara_posts',
     ownedPostIds: 'capybara_owned_post_ids'
 };
+const SUPABASE_URL = 'https://fyrfqjepidjzrzkdmuem.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_rtk5eiEZSdHSPF6XFVc9Ww_-5KACrY0'; 
 
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let walletClient = null;
 let publicClient = null;
 let userAddress = null;
@@ -200,23 +204,37 @@ function safeDecodeContent(text) {
     return decodeURIComponent(escape(atob(text)));
 }
 
-function getPosts() {
+// Busca os posts globalmente do Supabase
+async function fetchGlobalPosts() {
     try {
-        const raw = localStorage.getItem(STORAGE_KEYS.posts);
-        if (!raw) {
-            localStorage.setItem(STORAGE_KEYS.posts, JSON.stringify(defaultPosts));
-            return [...defaultPosts];
-        }
-
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [...defaultPosts];
+        const { data, error } = await supabase
+            .from('posts')
+            .select('*')
+            .order('createdAt', { ascending: false });
+            
+        if (error) throw error;
+        
+        // Se o banco estiver vazio, retorna os defaultPosts para o Feed não ficar em branco
+        return data && data.length > 0 ? data : [...defaultPosts];
     } catch (error) {
-        return [...defaultPosts];
+        console.error("Erro ao buscar posts globais:", error);
+        return [...defaultPosts]; // Fallback
     }
 }
 
-function savePosts(posts) {
-    localStorage.setItem(STORAGE_KEYS.posts, JSON.stringify(posts));
+// Salva o post globalmente no Supabase
+async function saveGlobalPost(newPost) {
+    try {
+        const { error } = await supabase
+            .from('posts')
+            .insert([newPost]);
+            
+        if (error) throw error;
+        return true;
+    } catch (error) {
+        console.error("Erro ao salvar no banco:", error);
+        return false;
+    }
 }
 
 function getOwnedPostIds() {
@@ -253,8 +271,10 @@ function formatAuthorLabel(post) {
     return 'Autor local';
 }
 
-function getPostById(postId) {
-    return getPosts().find((post) => post.id === postId) || null;
+// Corrigido: Agora busca o post consultando o banco de dados via fetchGlobalPosts
+async function getPostById(postId) {
+    const posts = await fetchGlobalPosts();
+    return posts.find((post) => post.id === postId) || null;
 }
 
 function buildPostLink(postId) {
@@ -292,9 +312,10 @@ function unlockOwnedContent() {
     setProtocolStatus('Owner Access');
 }
 
-function renderFeed() {
-    const posts = getPosts()
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+async function renderFeed() {
+    feedList.innerHTML = `<div class="empty-feed">Carregando relatórios da rede... ⏳</div>`;
+    
+    const posts = await fetchGlobalPosts();
 
     if (!posts.length) {
         feedList.innerHTML = `<div class="empty-feed">Nenhum relatório encontrado.</div>`;
@@ -396,27 +417,30 @@ generateLinkBtn.onclick = async () => {
     const title = reportTitleInput.value.trim() || 'Relatório Confidencial';
     const content = secretInput.value.trim();
 
+    // Validações básicas
     if (!content) {
         alert('Escreva um relatório antes de gerar o link.');
         return;
     }
-
     if (content.length < 40) {
         alert('O relatório está curto demais para a demo. Coloque mais contexto.');
         return;
     }
-
     if (content.length > 4000) {
         alert('O relatório está muito grande para este MVP.');
         return;
     }
 
+    // Preparação da UI para a Pipeline
     resetPipelineUI();
     verificationPanel.style.display = 'block';
     generateLinkBtn.disabled = true;
     generateLinkBtn.innerText = 'Iniciando Pipeline...';
 
     try {
+        // ==========================================
+        // ETAPA 1: Agente Fact-Checker
+        // ==========================================
         step1.className = 'step-active';
         step1.innerText = '🔄 Agente 1: Analisando Fatos...';
         await delay(800);
@@ -434,6 +458,9 @@ generateLinkBtn.onclick = async () => {
         step1.className = 'step-success';
         step1.innerText = `✅ Agente 1: Fatos Verificados (Score: ${factData.score}).`;
 
+        // ==========================================
+        // ETAPA 2: Agente Auditor de Cybersec
+        // ==========================================
         step2.className = 'step-active';
         step2.innerText = '🛡️ Agente 2: Auditoria de Segurança...';
         await delay(900);
@@ -451,6 +478,9 @@ generateLinkBtn.onclick = async () => {
         step2.className = 'step-success';
         step2.innerText = `✅ Agente 2: Aprovado. ${secData.report}`;
 
+        // ==========================================
+        // ETAPA 3: Juiz de Consenso
+        // ==========================================
         step3.className = 'step-active';
         step3.innerText = '⚖️ Agente 3: Assinando Consenso...';
         await delay(700);
@@ -464,6 +494,9 @@ generateLinkBtn.onclick = async () => {
         step3.className = 'step-success';
         step3.innerText = `✅ Agente 3: Consenso Atingido! (Decisão: ${consensusData.final_decision})`;
 
+        // ==========================================
+        // SUCESSO FINAL: Criar Post e Salvar no Supabase
+        // ==========================================
         const ownerId = userAddress || `local-author-${Date.now()}`;
         const authorLabel = userAddress
             ? `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`
@@ -479,11 +512,13 @@ generateLinkBtn.onclick = async () => {
             createdAt: new Date().toISOString()
         };
 
-        const posts = getPosts();
-        posts.unshift(newPost);
-        savePosts(posts);
-        addOwnedPostId(newPost.id);
-        renderFeed();
+        const saved = await saveGlobalPost(newPost);
+        if(!saved) {
+            throw new Error("Falha ao sincronizar o relatório com a rede (Supabase).");
+        }
+
+        addOwnedPostId(newPost.id); 
+        await renderFeed(); 
 
         const finalLink = buildPostLink(newPost.id);
 
@@ -491,6 +526,7 @@ generateLinkBtn.onclick = async () => {
         linkResult.style.display = 'block';
         generateLinkBtn.innerText = 'Link Gerado com Sucesso';
         setProtocolStatus('HTTP x402 Ready');
+
     } catch (error) {
         generateLinkBtn.innerText = 'Falha na Pipeline';
         generateLinkBtn.style.background = '#DC2626';
@@ -502,7 +538,7 @@ generateLinkBtn.onclick = async () => {
         } else if (step2.className === 'step-active') {
             step2.className = 'step-error';
             step2.innerText = `❌ Agente 2: ${error.message}`;
-        } else {
+        } else if (step1.className === 'step-active') {
             step1.className = 'step-error';
             step1.innerText = `❌ Agente 1: ${error.message}`;
         }
@@ -651,17 +687,21 @@ evaluateBtn.onclick = () => {
     alert('Avaliação processada! Micro-royalties distribuídos para o criador e para o curador.');
 };
 
+// ==========================================
+// INICIALIZAÇÃO DA PÁGINA
+// ==========================================
 renderFeed();
 
 if (postIdParam) {
-    const post = getPostById(postIdParam);
-    if (post) {
-        showMode('viewer');
-        initializeViewerFromPost(post);
-    } else {
-        showMode('feed');
-        alert('Relatório não encontrado.');
-    }
+    getPostById(postIdParam).then(post => {
+        if (post) {
+            showMode('viewer');
+            initializeViewerFromPost(post);
+        } else {
+            showMode('feed');
+            alert('Relatório não encontrado.');
+        }
+    });
 } else if (contentParam) {
     showMode('viewer');
     initializeViewerFromLegacyContent(contentParam);

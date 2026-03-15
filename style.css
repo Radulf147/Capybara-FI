@@ -1,0 +1,143 @@
+/* Reset e fundo escuro focado em Cyber/Web3 */
+body {
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    background-color: #0d1117;
+    color: #c9d1d9;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+}
+
+.container {
+    width: 100%;
+    max-width: 600px;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+/* Atualizando o H1 para alinhar a imagem e o texto perfeitamente */
+.project-title {
+    color: #836ef9; 
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px; /* Espaço entre a capivara e o texto */
+}
+
+/* Deixa a imagem exatamento do tamanho da letra */
+.capy-logo {
+    height: 3em; /* 1em é exatamente a altura da fonte do H1 */
+    width: auto; /* Mantém a proporção da imagem sem distorcer */
+}
+
+/* O truque mágico para inverter a imagem da direita horizontalmente */
+.logo-invertida {
+    transform: scaleX(-1);
+}
+
+/* O Cartão do Conteúdo */
+.card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.card-header h3 {
+    margin: 0;
+    color: #ffffff;
+}
+
+.badge {
+    background: #238636;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.author {
+    font-size: 14px;
+    color: #8b949e;
+    margin-bottom: 20px;
+}
+
+/* O Efeito de Borrado do Paywall */
+.blurred-content {
+    filter: blur(6px);
+    user-select: none;
+    margin: 20px 0;
+    padding: 15px;
+    background: #0d1117;
+    border-radius: 8px;
+    border: 1px dashed #30363d;
+    transition: all 0.5s ease;
+}
+
+/* Quando o usuário paga, ativamos essa classe via JS */
+.unblurred {
+    filter: none;
+    color: #58a6ff;
+    font-weight: 500;
+}
+
+/* Botões */
+button {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-top: 15px;
+}
+
+.btn-primary {
+    background: #21262d;
+    color: #c9d1d9;
+    border: 1px solid #30363d;
+    width: auto;
+}
+
+.btn-primary:hover {
+    background: #30363d;
+}
+
+.btn-action {
+    background: #836ef9;
+    color: white;
+}
+
+.btn-action:hover {
+    background: #6a55e0;
+}
+
+.btn-success {
+    background: #238636;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #2ea043;
+}
+
+.wallet-text {
+    font-size: 14px;
+    color: #8b949e;
+    margin-top: 10px;
+}

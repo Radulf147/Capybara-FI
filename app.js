@@ -5,7 +5,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 const CONTRACT_ADDRESS = "0x0d0e0266766d56b9be8a1cb1b3f05c38ca7a1046";
 const CONTENT_PRICE = "0.01";
 const STORAGE_KEYS = {
-    ownedPostIds: 'capybara_owned_post_ids'
+    ownedPostIds: 'capybara_owned_post_ids',
+    unlockedPostIds: 'capybara_unlocked_posts' // NOVO: Guarda os posts que a pessoa já pagou
 };
 
 // Integração Supabase
@@ -175,6 +176,24 @@ function isOwnedPost(post) {
     return getOwnedPostIds().includes(post.id);
 }
 
+// NOVO: Gerenciamento de compras
+function getUnlockedPostIds() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEYS.unlockedPostIds);
+        return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+}
+
+function addUnlockedPostId(postId) {
+    const unlocked = new Set(getUnlockedPostIds());
+    unlocked.add(postId);
+    localStorage.setItem(STORAGE_KEYS.unlockedPostIds, JSON.stringify([...unlocked]));
+}
+
+function hasUnlockedPost(postId) {
+    return getUnlockedPostIds().includes(postId);
+}
+
 function buildPostLink(postId) {
     return `${window.location.origin}${window.location.pathname}?post=${encodeURIComponent(postId)}`;
 }
@@ -193,13 +212,19 @@ async function renderFeed() {
 
     feedList.innerHTML = `<div class="post-stack">
         ${posts.map((post) => {
-            const ownerTag = isOwnedPost(post) ? '<span class="badge owner-post">Seu post</span>' : '';
+            const isOwner = isOwnedPost(post);
+            const isUnlocked = hasUnlockedPost(post.id);
+            
+            let tag = '';
+            if (isOwner) tag = '<span class="badge owner-post">Seu post</span>';
+            else if (isUnlocked) tag = '<span class="badge" style="background:#ECFDF5; color:#065F46; border-color:#A7F3D0;">Desbloqueado</span>';
+
             return `
                 <div class="feed-post">
                     <div class="post-meta-row">
                         <span class="author">Por: ${post.authorLabel || 'Autor local'}</span>
                         <div style="display:flex; gap:8px; align-items:center;">
-                            ${ownerTag}
+                            ${tag}
                             <span class="badge">${post.price} MON</span>
                         </div>
                     </div>
@@ -291,7 +316,13 @@ function initializeViewerFromPost(post) {
     viewerAuthor.textContent = `Por: ${post.authorLabel || 'Autor'} · ${post.price} MON`;
     secretContent.innerText = post.content;
 
-    if (isOwnedPost(post)) unlockOwnedContent();
+    // NOVO: Lógica de desbloqueio inteligente
+    if (isOwnedPost(post)) {
+        unlockOwnedContent();
+    } else if (hasUnlockedPost(post.id)) {
+        unlockContent({ demo: true, durationMs: 0, gasText: 'Já Adquirido' });
+        setProtocolStatus('Already Purchased');
+    }
 }
 
 function openViewerByPostId(postId) {
@@ -308,11 +339,10 @@ navFeed.onclick = () => {
     renderFeed(); 
 };
 
-// TRAVA DE SEGURANÇA NA NAVEGAÇÃO
 navCreate.onclick = () => { 
     if (!userAddress) {
         alert('Você precisa conectar sua carteira Web3 (MetaMask/Rabby) para criar e monetizar conteúdos.');
-        return; // Bloqueia a navegação
+        return;
     }
     showMode('create'); 
     window.history.pushState({}, '', window.location.pathname); 
@@ -327,7 +357,6 @@ prefillBtn.addEventListener('click', () => {
     updateCharCount(); resetPipelineUI();
 });
 
-// TRAVA DE SEGURANÇA NA GERAÇÃO DO LINK
 generateLinkBtn.onclick = async () => {
     if (!userAddress) {
         alert('Você precisa estar com a carteira conectada para gerar um link pagável.');
@@ -363,7 +392,7 @@ generateLinkBtn.onclick = async () => {
         const consensusData = await apiFetch('/api/agent3-consensus', { method: 'POST' });
         step3.className = 'step-success'; step3.innerText = `✅ Agente 3: Consenso Atingido!`;
 
-        const ownerId = userAddress; // Agora temos certeza que a carteira existe
+        const ownerId = userAddress; 
         const authorLabel = `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
 
         const newPost = {
@@ -402,6 +431,34 @@ copyLinkBtn.onclick = async () => {
 openLinkBtn.onclick = () => window.open(shareableLink.value.trim(), '_blank');
 
 // ==========================================
+// FUNÇÃO DE AUTO-CONECTAR
+// ==========================================
+async function autoConnectWallet() {
+    if (!window.ethereum) return;
+    
+    try {
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (accounts && accounts.length > 0) {
+            userAddress = accounts[0];
+            walletClient = createWalletClient({ chain: monadTestnet, transport: custom(window.ethereum) });
+            publicClient = createPublicClient({ chain: monadTestnet, transport: custom(window.ethereum) });
+            
+            connectBtn.style.display = 'none';
+            walletAddressEl.innerText = `🟢 Carteira: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
+            setProtocolStatus('Wallet Connected');
+            
+            await renderFeed();
+            
+            if (currentPost && isOwnedPost(currentPost)) {
+                unlockOwnedContent();
+            }
+        }
+    } catch (error) {
+        console.error("Erro ao auto-conectar:", error);
+    }
+}
+
+// ==========================================
 // WEB3 & PAGAMENTOS
 // ==========================================
 connectBtn.onclick = async () => {
@@ -433,6 +490,9 @@ payBtn.onclick = async () => {
         const startTime = performance.now();
         const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
         
+        // NOVO: Grava a compra no histórico local
+        addUnlockedPostId(currentPost.id);
+
         unlockContent({
             demo: false,
             durationMs: performance.now() - startTime,
@@ -449,6 +509,10 @@ demoUnlockBtn.onclick = async () => {
     payBtn.disabled = true; demoUnlockBtn.disabled = true;
     demoUnlockBtn.innerText = 'Simulando...';
     await delay(700);
+
+    // NOVO: Grava a compra do modo demo também
+    addUnlockedPostId(currentPost.id);
+
     unlockContent({ demo: true, durationMs: 420 + Math.floor(Math.random() * 120), gasText: '0.000021 MON' });
 };
 
@@ -462,6 +526,8 @@ evaluateBtn.onclick = () => {
 // ==========================================
 // INICIALIZAÇÃO
 // ==========================================
+autoConnectWallet();
+
 renderFeed();
 if (postIdParam) {
     getPostById(postIdParam).then(post => {
@@ -469,7 +535,7 @@ if (postIdParam) {
         else { showMode('feed'); alert('Relatório não encontrado.'); }
     });
 } else if (contentParam) {
-    showMode('feed'); // Fallback
+    showMode('feed'); 
 } else {
     showMode('feed');
 }

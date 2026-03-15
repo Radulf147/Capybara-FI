@@ -3,13 +3,13 @@ import { monadTestnet } from 'https://esm.sh/viem@2.40.0/chains';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const CONTRACT_ADDRESS = "0x0d0e0266766d56b9be8a1cb1b3f05c38ca7a1046";
+const CONTRACT_ABI = [{"inputs":[{"internalType":"uint256","name":"_price","type":"uint256"}],"name":"createContent","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_contentId","type":"uint256"},{"internalType":"address payable","name":"_affiliate","type":"address"}],"name":"buyContent","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_contentId","type":"uint256"}],"name":"evaluateContent","outputs":[],"stateMutability":"nonpayable","type":"function"}];
 const CONTENT_PRICE = "0.01";
 const STORAGE_KEYS = {
     ownedPostIds: 'capybara_owned_post_ids',
-    unlockedPostIds: 'capybara_unlocked_posts' // NOVO: Guarda os posts que a pessoa já pagou
+    unlockedPostIds: 'capybara_unlocked_posts'
 };
 
-// Integração Supabase
 const SUPABASE_URL = 'https://fyrfqjepidjzrzkdmuem.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_rtk5eiEZSdHSPF6XFVc9Ww_-5KACrY0'; 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -25,17 +25,16 @@ const EXAMPLE_REPORT = `Foi identificado tráfego suspeito saindo da porta 4444 
 
 const defaultPosts = [
     {
-        id: 'seed-cloud-run',
+        id: 1,
         title: 'Vulnerabilidade Zero-Day no Cloud Run',
         content: 'Foi identificado um padrão de exfiltração de dados em workloads Cloud Run através de portas não monitoradas.',
         price: '0.01',
         authorLabel: '0x71C...3A',
-        ownerId: 'seed-cloud-run',
+        ownerId: '0x0000000000000000000000000000000000000000',
         createdAt: new Date().toISOString()
     }
 ];
 
-// Mapeamento do DOM
 const urlParams = new URLSearchParams(window.location.search);
 const contentParam = urlParams.get('c');
 const postIdParam = urlParams.get('post');
@@ -83,16 +82,12 @@ const gasCostEl = document.getElementById('gasCost');
 const paymentsProcessedEl = document.getElementById('paymentsProcessed');
 const protocolStatusEl = document.getElementById('protocolStatus');
 
-// ==========================================
-// FUNÇÕES AUXILIARES & MOCKS
-// ==========================================
 async function apiFetch(endpoint, options = {}) {
     try {
         const response = await fetch(endpoint, options);
         if (response.ok) return await response.json();
         throw new Error('Endpoint indisponível');
     } catch (error) {
-        console.log(`[API MOCK] Interceptando chamada para ${endpoint}`);
         if (endpoint.includes('agent1-factcheck')) return { passed: true, score: 95 };
         if (endpoint.includes('agent2-cybersec')) return { safe: true, report: 'Livre de injeção e malwares.' };
         if (endpoint.includes('agent3-consensus')) return { consensus_reached: true, final_decision: 'Approved' };
@@ -122,16 +117,12 @@ function incrementPayments() {
     paymentsProcessedEl.innerText = String(paymentsProcessed);
 }
 
-// ==========================================
-// BANCO DE DADOS (SUPABASE)
-// ==========================================
 async function fetchGlobalPosts() {
     try {
         const { data, error } = await supabase.from('posts').select('*').order('createdAt', { ascending: false });
         if (error) throw error;
         return data && data.length > 0 ? data : [...defaultPosts];
     } catch (error) {
-        console.error("Erro ao buscar posts:", error);
         return [...defaultPosts];
     }
 }
@@ -142,19 +133,15 @@ async function saveGlobalPost(newPost) {
         if (error) throw error;
         return true;
     } catch (error) {
-        console.error("Erro ao salvar no banco:", error);
         return false;
     }
 }
 
 async function getPostById(postId) {
     const posts = await fetchGlobalPosts();
-    return posts.find((post) => post.id === postId) || null;
+    return posts.find((post) => String(post.id) === String(postId)) || null;
 }
 
-// ==========================================
-// IDENTIDADE E PROPRIEDADE
-// ==========================================
 function getOwnedPostIds() {
     try {
         const raw = localStorage.getItem(STORAGE_KEYS.ownedPostIds);
@@ -176,7 +163,6 @@ function isOwnedPost(post) {
     return getOwnedPostIds().includes(post.id);
 }
 
-// NOVO: Gerenciamento de compras
 function getUnlockedPostIds() {
     try {
         const raw = localStorage.getItem(STORAGE_KEYS.unlockedPostIds);
@@ -198,9 +184,6 @@ function buildPostLink(postId) {
     return `${window.location.origin}${window.location.pathname}?post=${encodeURIComponent(postId)}`;
 }
 
-// ==========================================
-// RENDERIZAÇÃO DE UI
-// ==========================================
 async function renderFeed() {
     feedList.innerHTML = `<div class="empty-feed">Carregando relatórios da rede... ⏳</div>`;
     const posts = await fetchGlobalPosts();
@@ -316,7 +299,6 @@ function initializeViewerFromPost(post) {
     viewerAuthor.textContent = `Por: ${post.authorLabel || 'Autor'} · ${post.price} MON`;
     secretContent.innerText = post.content;
 
-    // NOVO: Lógica de desbloqueio inteligente
     if (isOwnedPost(post)) {
         unlockOwnedContent();
     } else if (hasUnlockedPost(post.id)) {
@@ -328,10 +310,6 @@ function initializeViewerFromPost(post) {
 function openViewerByPostId(postId) {
     window.location.href = buildPostLink(postId);
 }
-
-// ==========================================
-// EVENTOS DE BOTÕES E NAVEGAÇÃO
-// ==========================================
 
 navFeed.onclick = () => { 
     showMode('feed'); 
@@ -394,9 +372,20 @@ generateLinkBtn.onclick = async () => {
 
         const ownerId = userAddress; 
         const authorLabel = `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
+        const numericId = Date.now();
+
+        const txHash = await walletClient.writeContract({
+            account: userAddress,
+            address: CONTRACT_ADDRESS,
+            abi: CONTRACT_ABI,
+            functionName: 'createContent',
+            args: [parseEther(CONTENT_PRICE)]
+        });
+
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
 
         const newPost = {
-            id: `post_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            id: numericId,
             title, content, price: CONTENT_PRICE, ownerId, authorLabel, createdAt: new Date().toISOString()
         };
 
@@ -430,9 +419,6 @@ copyLinkBtn.onclick = async () => {
 
 openLinkBtn.onclick = () => window.open(shareableLink.value.trim(), '_blank');
 
-// ==========================================
-// FUNÇÃO DE AUTO-CONECTAR
-// ==========================================
 async function autoConnectWallet() {
     if (!window.ethereum) return;
     
@@ -454,13 +440,9 @@ async function autoConnectWallet() {
             }
         }
     } catch (error) {
-        console.error("Erro ao auto-conectar:", error);
     }
 }
 
-// ==========================================
-// WEB3 & PAGAMENTOS
-// ==========================================
 connectBtn.onclick = async () => {
     if (!window.ethereum) return alert('Instale a MetaMask ou Rabby.');
     walletClient = createWalletClient({ chain: monadTestnet, transport: custom(window.ethereum) });
@@ -474,7 +456,7 @@ connectBtn.onclick = async () => {
         setProtocolStatus('Wallet Connected');
         await renderFeed();
         if (currentPost && isOwnedPost(currentPost)) unlockOwnedContent();
-    } catch (error) { console.error(error); }
+    } catch (error) { }
 };
 
 payBtn.onclick = async () => {
@@ -485,12 +467,19 @@ payBtn.onclick = async () => {
     payBtn.innerText = 'Confirme na carteira...';
 
     try {
-        const txHash = await walletClient.sendTransaction({ account: userAddress, to: CONTRACT_ADDRESS, value: parseEther(CONTENT_PRICE) });
+        const txHash = await walletClient.writeContract({
+            account: userAddress,
+            address: CONTRACT_ADDRESS,
+            abi: CONTRACT_ABI,
+            functionName: 'buyContent',
+            args: [BigInt(currentPost.id), "0x0000000000000000000000000000000000000000"],
+            value: parseEther(CONTENT_PRICE)
+        });
+
         payBtn.innerText = '⏳ Aguardando Monad...';
         const startTime = performance.now();
         const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
         
-        // NOVO: Grava a compra no histórico local
         addUnlockedPostId(currentPost.id);
 
         unlockContent({
@@ -510,22 +499,38 @@ demoUnlockBtn.onclick = async () => {
     demoUnlockBtn.innerText = 'Simulando...';
     await delay(700);
 
-    // NOVO: Grava a compra do modo demo também
     addUnlockedPostId(currentPost.id);
 
     unlockContent({ demo: true, durationMs: 420 + Math.floor(Math.random() * 120), gasText: '0.000021 MON' });
 };
 
-evaluateBtn.onclick = () => {
-    evaluateBtn.disabled = true; evaluateBtn.style.background = '#059669';
-    evaluateBtn.innerText = '✅ Avaliação Registrada!';
-    gasCostEl.style.color = '#D97706'; gasCostEl.innerText = '+ 0.002 MON Earned';
-    alert('Avaliação processada! Micro-royalties distribuídos.');
+evaluateBtn.onclick = async () => {
+    if (!currentPost) return;
+    evaluateBtn.disabled = true;
+    evaluateBtn.innerText = 'Confirmando avaliação...';
+    
+    try {
+        const txHash = await walletClient.writeContract({
+            account: userAddress,
+            address: CONTRACT_ADDRESS,
+            abi: CONTRACT_ABI,
+            functionName: 'evaluateContent',
+            args: [BigInt(currentPost.id)]
+        });
+        
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+        evaluateBtn.style.background = '#059669';
+        evaluateBtn.innerText = '✅ Avaliação Registrada!';
+        gasCostEl.style.color = '#D97706'; gasCostEl.innerText = '+ 0.001 MON Earned';
+        alert('Avaliação processada! Micro-royalties distribuídos.');
+    } catch (error) {
+        evaluateBtn.disabled = false;
+        evaluateBtn.innerText = 'Avaliar e Receber Recompensa';
+        alert('Erro ao processar a avaliação na rede.');
+    }
 };
 
-// ==========================================
-// INICIALIZAÇÃO
-// ==========================================
 autoConnectWallet();
 
 renderFeed();

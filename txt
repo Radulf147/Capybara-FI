@@ -1,0 +1,24 @@
+Atue como um Arquiteto Web3 Sênior. Nosso projeto de hackathon (Capybara-FI) usa HTML, CSS e JavaScript puro (com Viem via CDN) e precisamos evoluí-lo para uma experiência completa de rede social (Social-Fi), focada na usabilidade e na integração visual do Agente de IA (padrão ERC-8004).
+
+Objetivos da Nova Arquitetura (Single Page Application):
+Transforme a interface atual em um sistema de abas/telas dinâmicas na mesma página (escondendo/mostrando divs), contendo:
+
+1. Persistência de Sessão (Melhoria Crítica de UX):
+O usuário não deve precisar clicar em "Conectar Carteira" a cada reload. Salve o endereço da carteira conectada no localStorage. Ao abrir a página, o JavaScript deve checar o localStorage e a injeção do window.ethereum para auto-conectar e manter o usuário logado de forma fluida.
+
+2. Tela Principal: Feed da Rede Social:
+Um feed rolável exibindo postagens.
+
+Crie um array de objetos no JavaScript com 3 postagens "mockadas" (padrão).
+
+Lógica de Acesso: Cada post tem um botão "Pagar 0.01 MON". Se o usuário logado for o dono da postagem (criador) OU se ele já tiver clicado em pagar e a transação na Monad confirmar, o conteúdo borrado deve ser revelado.
+
+3. Tela de Criação & Integração com IA (Chat):
+Um novo menu onde o usuário pode criar uma postagem.
+
+O Diferencial: Inclua uma interface de Chat simulada com o nosso "Agente de IA (0xSec_Bot)". O usuário digita um prompt (ex: "Gere um relatório sobre o IP 192..."), a interface simula um "digitando..." e retorna um texto mockado.
+
+O usuário pode então aprovar esse texto gerado pela IA e publicá-lo diretamente no Feed Principal.
+
+O que eu preciso:
+Forneça a atualização completa e integrada dos arquivos index.html, style.css e app.js. Mantenha o design atual (tema claro, botões amarelos/âmbar) e o "Monitor de Performance da Monad" no rodapé. O código deve ser copiar, colar e rodar, focado na "Fumaça e Espelhos" para uma demonstração de 3 minutos perfeita.
